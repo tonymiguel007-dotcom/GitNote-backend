@@ -6,7 +6,6 @@ const { nanoid } = require('nanoid');
 
 const adapter = new FileSync('db.json');
 const db = low(adapter);
-// Initialize empty database with comments array
 db.defaults({ users: [], notes: [], comments: [] }).write();
 console.log('✅ Database initialized');
 
@@ -14,9 +13,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Health check endpoints
+// Health check
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', message: 'GitNote API is running' });
+  res.json({ status: 'ok', message: 'GitNote API' });
 });
 
 app.get('/health', (req, res) => {
@@ -46,7 +45,6 @@ app.post('/api/login', (req, res) => {
   res.json({ token: username });
 });
 
-// Middleware to protect routes
 function authenticate(req, res, next) {
   const token = req.headers.authorization;
   if (!token) return res.status(401).json({ error: 'No token provided' });
@@ -58,8 +56,7 @@ function authenticate(req, res, next) {
 
 // -------------------- NOTES --------------------
 app.get('/api/notes', (req, res) => {
-  const notes = db.get('notes').value();
-  res.json(notes);
+  res.json(db.get('notes').value());
 });
 
 app.get('/api/notes/:id', (req, res) => {
@@ -87,12 +84,9 @@ app.put('/api/notes/:id', authenticate, (req, res) => {
   const note = db.get('notes').find({ id: req.params.id }).value();
   if (!note) return res.status(404).json({ error: 'Note not found' });
   if (note.author !== req.user.username) {
-    return res.status(403).json({ error: 'You can only edit your own notes' });
+    return res.status(403).json({ error: 'Forbidden' });
   }
-  db.get('notes')
-    .find({ id: req.params.id })
-    .assign({ title, content, updatedAt: new Date().toISOString() })
-    .write();
+  db.get('notes').find({ id: req.params.id }).assign({ title, content }).write();
   res.json({ success: true });
 });
 
@@ -100,21 +94,19 @@ app.delete('/api/notes/:id', authenticate, (req, res) => {
   const note = db.get('notes').find({ id: req.params.id }).value();
   if (!note) return res.status(404).json({ error: 'Note not found' });
   if (note.author !== req.user.username) {
-    return res.status(403).json({ error: 'You can only delete your own notes' });
+    return res.status(403).json({ error: 'Forbidden' });
   }
   db.get('notes').remove({ id: req.params.id }).write();
   res.json({ success: true });
 });
 
 app.get('/api/notes/:id/forks', (req, res) => {
-  const forks = db.get('notes').filter({ parentId: req.params.id }).value();
-  res.json(forks);
+  res.json(db.get('notes').filter({ parentId: req.params.id }).value());
 });
 
 // -------------------- COMMENTS --------------------
 app.get('/api/notes/:id/comments', (req, res) => {
-  const comments = db.get('comments').filter({ noteId: req.params.id }).value() || [];
-  res.json(comments);
+  res.json(db.get('comments').filter({ noteId: req.params.id }).value() || []);
 });
 
 app.post('/api/notes/:id/comments', authenticate, (req, res) => {
@@ -125,7 +117,7 @@ app.post('/api/notes/:id/comments', authenticate, (req, res) => {
     id: nanoid(),
     noteId: req.params.id,
     author: req.user.username,
-    text: text,
+    text,
     createdAt: new Date().toISOString()
   };
   
@@ -133,16 +125,34 @@ app.post('/api/notes/:id/comments', authenticate, (req, res) => {
   res.status(201).json(newComment);
 });
 
+// Start server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`✅ Backend running on port ${PORT}`);
 });
 
-// Global error handlers
+// Handle graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, closing server...');
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received, closing server...');
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+});
+
+// Error handlers
 process.on('uncaughtException', (err) => {
-  console.error('❌ Uncaught Exception:', err);
+  console.error('Uncaught Exception:', err);
 });
 
 process.on('unhandledRejection', (err) => {
-  console.error('❌ Unhandled Rejection:', err);
+  console.error('Unhandled Rejection:', err);
 });
