@@ -8,10 +8,20 @@ const adapter = new FileSync('db.json');
 const db = low(adapter);
 // Initialize empty database with comments array
 db.defaults({ users: [], notes: [], comments: [] }).write();
+console.log('✅ Database initialized');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Health check endpoints
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', message: 'GitNote API is running' });
+});
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
 
 // -------------------- USERS --------------------
 app.post('/api/register', (req, res) => {
@@ -33,7 +43,6 @@ app.post('/api/login', (req, res) => {
   if (!user) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
-  // For simplicity, we use the username as a token.
   res.json({ token: username });
 });
 
@@ -48,20 +57,17 @@ function authenticate(req, res, next) {
 }
 
 // -------------------- NOTES --------------------
-// Get all notes (public)
 app.get('/api/notes', (req, res) => {
   const notes = db.get('notes').value();
   res.json(notes);
 });
 
-// Get a single note
 app.get('/api/notes/:id', (req, res) => {
   const note = db.get('notes').find({ id: req.params.id }).value();
   if (!note) return res.status(404).json({ error: 'Note not found' });
   res.json(note);
 });
 
-// Create a note (authenticated)
 app.post('/api/notes', authenticate, (req, res) => {
   const { title, content, parentId } = req.body;
   const newNote = {
@@ -76,7 +82,6 @@ app.post('/api/notes', authenticate, (req, res) => {
   res.status(201).json(newNote);
 });
 
-// Update a note (authenticated, only author)
 app.put('/api/notes/:id', authenticate, (req, res) => {
   const { title, content } = req.body;
   const note = db.get('notes').find({ id: req.params.id }).value();
@@ -91,7 +96,6 @@ app.put('/api/notes/:id', authenticate, (req, res) => {
   res.json({ success: true });
 });
 
-// Delete a note (authenticated, only author)
 app.delete('/api/notes/:id', authenticate, (req, res) => {
   const note = db.get('notes').find({ id: req.params.id }).value();
   if (!note) return res.status(404).json({ error: 'Note not found' });
@@ -102,20 +106,17 @@ app.delete('/api/notes/:id', authenticate, (req, res) => {
   res.json({ success: true });
 });
 
-// Get all forks of a note
 app.get('/api/notes/:id/forks', (req, res) => {
   const forks = db.get('notes').filter({ parentId: req.params.id }).value();
   res.json(forks);
 });
 
 // -------------------- COMMENTS --------------------
-// Get comments for a note
 app.get('/api/notes/:id/comments', (req, res) => {
   const comments = db.get('comments').filter({ noteId: req.params.id }).value() || [];
   res.json(comments);
 });
 
-// Add a comment to a note
 app.post('/api/notes/:id/comments', authenticate, (req, res) => {
   const { text } = req.body;
   if (!text) return res.status(400).json({ error: 'Comment text required' });
@@ -135,4 +136,13 @@ app.post('/api/notes/:id/comments', authenticate, (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Backend running on port ${PORT}`);
+});
+
+// Global error handlers
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (err) => {
+  console.error('❌ Unhandled Rejection:', err);
 });
